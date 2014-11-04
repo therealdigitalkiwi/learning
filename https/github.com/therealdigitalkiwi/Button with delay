@@ -1,0 +1,82 @@
+
+
+// constants won't change. They're used here to 
+// set pin numbers:
+const int buttonPin = 8;     // the number of the pushbutton pin
+const int ledPin =  4;      // the number of the LED pin
+
+// variables will change:
+int buttonState = 0;         // variable for reading the pushbutton status
+unsigned long fallTime;
+boolean ledState;
+
+//Why void and not int here, not sure if this is in the correct place???
+
+void LEDSon()
+{
+    fallTime = millis() + 2000;
+    ledState = true;
+    digitalWrite(ledPin, HIGH);
+    
+}
+
+void LEDSoff()
+{
+    ledState = false;
+    digitalWrite(ledPin, LOW);
+}
+
+
+
+//
+void setup() {
+  // initialize the LED pin as an output:
+  pinMode(ledPin, OUTPUT);      
+  // initialize the pushbutton pin as an input:
+  pinMode(buttonPin, INPUT);
+  
+       
+Serial.begin(9600);
+  Serial.println();  
+}
+
+
+
+void loop(){
+  // read the state of the pushbutton value:
+  buttonState = digitalRead(buttonPin);
+
+
+
+  // check if the pushbutton is pressed.
+  // if it is, the buttonState is HIGH:
+
+            
+            
+  if (buttonState == HIGH) {     
+    // turn LED on:
+    LEDSon();    
+    //digitalWrite(ledPin, HIGH);
+   Serial.println("ledPin is HIGH");
+   Serial.print("ledState is: ");
+   Serial.println(ledState);
+ 
+  } 
+  
+  // Not sure if this is formatted correctly for Arduino - I don't understand this code. 
+  if (ledState && ((fallTime - millis()) & (1UL<<(sizeof(fallTime) * 8 - 1))))
+            LEDSon();
+            
+  //if the above code doesn't work then turn the LEDs off          
+  else {
+  
+   
+    LEDSoff();
+    //digitalWrite(ledPin, LOW);
+   Serial.println("ledPin is LOW"); 
+   Serial.print("ledState is: ");
+   Serial.println(ledState);
+   Serial.print("Falltime: ");
+   Serial.println(fallTime);
+  }
+}
