@@ -1,0 +1,60 @@
+#include <AcceleroMMA7361.h>
+#include "RTClib.h"
+#include <Wire.h>
+
+AcceleroMMA7361 accelero;
+int x;
+int y;
+int z;
+
+RTC_DS1307 RTC; // define the Real Time Clock object
+
+void setup()
+{
+  Serial.begin(9600);
+  accelero.begin(13, 12, 11, 8, A0, A1, A2);
+  accelero.setARefVoltage(3.3);                   //sets the AREF voltage to 3.3V
+  accelero.setSensitivity(LOW);                   //sets the sensitivity to +/-6G
+  accelero.calibrate();
+  Wire.begin();
+  RTC.begin();
+  
+    if (! RTC.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    // following line sets the RTC to the date & time this sketch was compiled
+    // uncomment it & upload to set the time, date and start run the RTC!
+    //RTC.adjust(DateTime(__DATE__, __TIME__));
+}
+}
+
+void loop()
+{
+    DateTime now = RTC.now();
+      x = accelero.getXAccel();
+      y = accelero.getYAccel();
+      z = accelero.getZAccel();
+   // Serial.print(now.day(), DEC);
+   // Serial.print('/');
+    //Serial.print(now.month(), DEC);
+    //Serial.print('/');
+    //Serial.print(now.year(), DEC);
+    //Serial.print(' ');
+
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.print(' ');
+  Serial.print("\nx: ");
+  Serial.print(x);
+  Serial.print(' ');
+  Serial.print(" \ty: ");
+  Serial.print(y);
+  Serial.print(' ');
+  Serial.print(" \tz: ");
+  Serial.print(z);
+    Serial.println();
+  //Serial.print("\tG*10^-2");
+  delay(5000);                                     //make it readable
+}
