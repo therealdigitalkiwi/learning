@@ -408,14 +408,31 @@ if (heating == 0) {
 //Debugging section
 
   lcd.setCursor(0, 0);
+  
+  if (now.hour() < 10) {
+  lcd.print("0");
   lcd.print(now.hour(), DEC);
+  }
+  
+  else {
+  lcd.print(now.hour(), DEC);
+  } 
+
   lcd.print(":");
+  
+  if (now.minute() < 10) {
+  lcd.print("0");
   lcd.print(now.minute(), DEC);
+  }
+  else {
+  lcd.print(now.minute(), DEC);
+  } 
+  lcd.print(" ");
 
 
 
 lcd.setCursor(6, 0);
-lcd.print("TEMP: ");
+lcd.print("TEMP:");
 lcd.print(sensors.getTempC(insideThermometer));
 lcd.print("c");
 
