@@ -1,0 +1,457 @@
+//Working up/down buttons
+//##### Relay is now on Pin D5
+// using waterproof sensor
+
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h>
+#include "RTClib.h"
+#include <LiquidCrystal.h>
+
+RTC_DS1307 rtc;
+
+// initialize the library with the numbers of the interface pins
+LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
+
+ 
+// Data wire is plugged into pin #### 3 #### on the Arduino
+#define ONE_WIRE_BUS 4
+
+int insideThermometerInt = 0;
+
+//Button stuff
+// this constant won't change:
+const int  buttonPinUp = 2;    // the pin that the pushbutton is attached to
+const int  buttonPinDown = 3;    // the pin that the pushbutton is attached to
+
+// Variables will change:
+int buttonPushCounter = 0;   // counter for the number of button presses
+int buttonStateUp = 0;         // current state of the button
+int lastButtonStateUp = 0;     // previous state of the button
+
+int buttonStateDown = 0;         // current state of the button
+int lastButtonStateDown = 0;     // previous state of the button
+
+//What time mode are we in currently
+
+int dayTime = 0;
+int nightTime = 0;
+int sixAM = 0;
+int sixThirty = 0;
+int nightTimeAM = 0;
+
+
+//Temp range for time modes
+//Max temps
+
+float dayTimeMaxTemp = 21.50;
+float nightTimeMaxTemp = 18.50;
+float sixAMMaxTemp = 20.50;
+float sixThirtyMaxTemp = 22.50;
+float currentMaxTemp = 0;
+//Min temps
+
+int dayTimeMinTemp = 20;
+int nightTimeMinTemp = 17;
+int sixAMMinTemp = 19;
+int sixThirtyMinTemp = 21;
+int currentMinTemp = 0;
+
+int heating = 0;
+
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature sensors(&oneWire);
+
+//This is the mini temp sensor in first version
+DeviceAddress insideThermometer = { 0x28, 0x78, 0xD5, 0xB5, 0x05, 0x00, 0x00, 0x8E };
+
+//This is one of the water proof ones!!!!
+//DeviceAddress insideThermometer = { 0x28, 0x1B, 0x81, 0x57, 0x06, 0x00, 0x00, 0x34 };
+ 
+void setup(void)
+{
+  // start serial port
+  Serial.begin(9600);
+  // Start up the library
+  sensors.begin();
+  // set the resolution to 10 bit (good enough?)
+  sensors.setResolution(insideThermometer, 10);
+
+  // set up the LCD's number of columns and rows:
+  lcd.begin(16, 2);
+  
+//RTC setup
+  Wire.begin();
+  rtc.begin();
+
+digitalWrite(5, HIGH);
+
+//LED or relay pins
+ pinMode(5, OUTPUT);
+
+  // initialize the button pin as a input:
+  pinMode(buttonPinUp, INPUT);
+  pinMode(buttonPinDown, INPUT);
+  // initialize the LED as an output:
+  //pinMode(ledPin, OUTPUT);
+}
+
+
+void loop(void)
+{
+  //Get time
+  DateTime now = rtc.now();
+  
+  delay(50);
+  
+  sensors.requestTemperatures();
+
+ delay(50);
+
+ 
+ float realTimeTempC = sensors.getTempC(insideThermometer);
+  Serial.print("Current temperature is: ");
+  Serial.print(realTimeTempC);
+  
+  //printTemperature(insideThermometer);
+  Serial.print("\n\r");
+
+
+   //Check for 21:59 time for night time reset to default values
+   if(now.hour() == 21 && now.minute() == 59){
+    
+   //Max Temps
+     dayTimeMaxTemp = 21.50;
+     nightTimeMaxTemp = 18.50;
+     sixAMMaxTemp = 20.50;
+     sixThirtyMaxTemp = 22.50;
+     
+     
+    //Min temps
+    dayTimeMinTemp = 20;
+    nightTimeMinTemp = 17;
+    sixAMMinTemp = 19;
+    sixThirtyMinTemp = 21;
+    
+    currentMaxTemp = dayTimeMaxTemp;
+    currentMinTemp = dayTimeMinTemp;
+    
+   }
+   
+
+
+//Check what time period we are in currently and set the appropriate variable
+ 
+
+  //Check for night time setting
+  
+   if(now.hour() >= 22) {
+     dayTime = 0;
+     nightTime = 1;
+     sixAM = 0;
+     sixThirty = 0;
+     nightTimeAM = 0;
+    currentMaxTemp = nightTimeMaxTemp;
+    currentMinTemp = nightTimeMinTemp;
+   }
+
+   //Check for night time AM setting
+   
+     if(now.hour() < 6) {
+     dayTime = 0;
+     nightTime = 0;
+     nightTimeAM = 1;
+     sixAM = 0;
+     sixThirty = 0;
+    currentMaxTemp = nightTimeMaxTemp;
+    currentMinTemp = nightTimeMinTemp;
+     
+   }
+
+
+   //Check for 6am time setting
+   if(now.hour() == 6 && now.minute() <= 30){
+     dayTime = 0;
+     nightTime = 0;
+     sixAM = 1;
+     sixThirty = 0;
+     nightTimeAM = 0;
+    currentMaxTemp = sixAMMaxTemp;
+    currentMinTemp = sixAMMinTemp;
+   }
+   
+   //Check for 6:30am time setting
+     if(now.hour() == 6 && now.minute() >= 30){
+      dayTime = 0;
+     nightTime = 0;
+     sixAM = 0;
+     sixThirty = 1;
+     nightTimeAM = 0;
+    currentMaxTemp = sixThirtyMaxTemp;
+    currentMinTemp = sixThirtyMinTemp;
+
+   }
+    
+   //Check for dayTime time setting
+   
+   if(now.hour() >= 7 && now.hour() < 22){
+     dayTime = 1;
+     nightTime = 0;
+     sixAM = 0;
+     sixThirty = 0;
+     nightTimeAM = 0;
+    currentMaxTemp = dayTimeMaxTemp;
+    currentMinTemp = dayTimeMinTemp;
+   
+   }
+   
+//Check temp is in range for correct time of day
+
+//Day time and temp range check
+
+if (realTimeTempC <= dayTimeMinTemp && dayTime == 1) {
+  //Start heating
+  //digitalWrite(2, HIGH);
+  heating = 1;
+
+} 
+
+if (realTimeTempC >= dayTimeMaxTemp && dayTime == 1) {
+  //Stop heating
+  //digitalWrite(2, LOW);
+  heating = 0;
+ } 
+
+
+
+//Night time and temp range check
+  
+if (realTimeTempC <= nightTimeMinTemp && nightTime == 1) {
+  //Start heating
+  heating = 1;
+} 
+
+if (realTimeTempC >= nightTimeMaxTemp && nightTime == 1) {
+  //Stop heating
+  heating = 0;
+ } 
+
+//Night time AM and temp range check
+
+if (realTimeTempC <= nightTimeMinTemp && nightTimeAM == 1) {
+  //Start heating
+  heating = 1;
+} 
+
+if (realTimeTempC >= nightTimeMaxTemp && nightTimeAM == 1) {
+  //Stop heating
+  heating = 0;
+ } 
+
+//6am time and temp range check
+
+if (realTimeTempC <= sixAMMinTemp && sixAM == 1) {
+  //Start heating
+  heating = 1;
+} 
+
+if (realTimeTempC >= sixAMMaxTemp && sixAM == 1) {
+  //Stop heating
+  heating = 0;
+ } 
+
+
+//6:30am time and temp range check
+
+ if (realTimeTempC <= sixThirtyMinTemp && sixThirty == 1) {
+  //Start heating
+  heating = 1;
+} 
+
+if (realTimeTempC >= sixThirtyMaxTemp && sixThirty == 1) {
+  //Stop heating
+  heating = 0;
+ } 
+
+
+
+if (heating == 1) {
+  //Start heating
+  digitalWrite(5, LOW);
+}
+
+if (heating == 0) {
+ digitalWrite(5, HIGH);
+ 
+} 
+
+
+
+
+
+
+
+
+//Button Stuff
+
+ // read the pushbutton input pin:
+  buttonStateUp = digitalRead(buttonPinUp);
+  buttonStateDown = digitalRead(buttonPinDown);
+
+
+  //UP
+  // compare the buttonStateUp to its previous state
+  if (buttonStateUp != lastButtonStateUp) {
+    // if the state has changed, increment the counter
+    if (buttonStateUp == HIGH) {
+      // if the current state is HIGH then the button
+      // wend from off to on:
+      buttonPushCounter++;
+      
+      dayTimeMaxTemp++;
+      nightTimeMaxTemp++;
+      sixAMMaxTemp++;
+      sixThirtyMaxTemp++;
+
+      dayTimeMinTemp++;
+      nightTimeMinTemp++;
+      sixAMMinTemp++;
+      sixThirtyMinTemp++;
+      
+      //lcd.setCursor(0, 0);
+      
+      Serial.println("Up on");
+      
+      //lcd.print("Up on ");
+      //lcd.print(dayTimeMaxTemp);
+      
+      Serial.print("number of button pushes:  ");
+      Serial.println(buttonPushCounter);
+
+
+      
+    }
+    else {
+      // if the current state is LOW then the button
+      // wend from on to off:
+      Serial.println("Up off");
+    }
+    // Delay a little bit to avoid bouncing
+    delay(50);
+  }
+  // save the current state as the last state,
+  //for next time through the loop
+  lastButtonStateUp = buttonStateUp;
+
+
+
+//DOWN
+  // compare the buttonStateDown to its previous state
+  if (buttonStateDown != lastButtonStateDown) {
+    // if the state has changed, increment the counter
+    if (buttonStateDown == HIGH) {
+      // if the current state is HIGH then the button
+      // wend from off to on:
+      buttonPushCounter--;
+      
+      dayTimeMaxTemp--;
+      nightTimeMaxTemp--;
+      sixAMMaxTemp--;
+      sixThirtyMaxTemp--;
+
+      dayTimeMinTemp--;
+      nightTimeMinTemp--;
+      sixAMMinTemp--;
+      sixThirtyMinTemp--;
+      
+      
+     // lcd.setCursor(0, 0);
+      
+      Serial.println("Down on");
+      
+      //lcd.print("Down on ");
+      //lcd.print(dayTimeMinTemp);
+      
+      Serial.print("number of button pushes:  ");
+      Serial.println(buttonPushCounter);
+
+
+      
+    }
+    else {
+      // if the current state is LOW then the button
+      // wend from on to off:
+      Serial.println("Down off");
+    }
+    // Delay a little bit to avoid bouncing
+    delay(50);
+  }
+  // save the current state as the last state,
+  //for next time through the loop
+  lastButtonStateDown = buttonStateDown;
+
+
+    lcd.setCursor(0, 2);
+    lcd.print("MAX ");
+    lcd.print(currentMaxTemp);
+    lcd.setCursor(10, 2);
+    lcd.print("MIN ");
+    lcd.print(currentMinTemp);
+
+
+
+
+//Print the current time 
+//Debugging section
+
+  lcd.setCursor(0, 0);
+  lcd.print(now.hour(), DEC);
+  lcd.print(":");
+  lcd.print(now.minute(), DEC);
+
+
+
+lcd.setCursor(6, 0);
+lcd.print("TEMP: ");
+lcd.print(sensors.getTempC(insideThermometer));
+lcd.print("c");
+
+
+
+
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
+    
+    Serial.println();
+
+    Serial.print("dayTime value: ");
+    Serial.print (dayTime);
+    Serial.println();
+    Serial.print("nightTime value: ");
+    Serial.print (nightTime);
+    Serial.println();
+    Serial.print("nightTimeAM value: ");
+    Serial.print (nightTimeAM);
+    Serial.println();
+    Serial.print("sixAM value: ");
+    Serial.print (sixAM);
+    Serial.println();
+    Serial.print("sixThirty value: ");
+    Serial.print (sixThirty);
+    Serial.println();
+    Serial.print("Heating on: ");
+    Serial.print (heating);
+    Serial.println();
+    Serial.println();
+
+    
+
+delay(50);
+}
