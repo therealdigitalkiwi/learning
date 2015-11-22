@@ -1,0 +1,255 @@
+/*
+Prototype parking sensor LPD - with smoothing
+*/
+#include "LPD8806.h"
+#include "SPI.h" // Comment out this line if using Trinket or Gemma
+#ifdef __AVR_ATtiny85__
+ #include <avr/power.h>
+#endif
+
+// Number of RGB LEDs in strand:
+int nLEDs = 48;
+
+// Chose 2 pins for output; can be any valid output pins:
+int dataPin  = 2;
+int clockPin = 3;
+
+// First parameter is the number of LEDs in the strand.  The LED strips
+// are 32 LEDs per meter but you can extend or cut the strip.  Next two
+// parameters are SPI data and clock pins:
+LPD8806 strip = LPD8806(nLEDs, dataPin, clockPin);
+
+// You can optionally use hardware SPI for faster writes, just leave out
+// the data and clock pin parameters.  But this does limit use to very
+// specific pins on the Arduino.  For "classic" Arduinos (Uno, Duemilanove,
+// etc.), data = pin 11, clock = pin 13.  For Arduino Mega, data = pin 51,
+// clock = pin 52.  For 32u4 Breakout Board+ and Teensy, data = pin B2,
+// clock = pin B1.  For Leonardo, this can ONLY be done on the ICSP pins.
+//LPD8806 strip = LPD8806(nLEDs);
+
+const int numReadings = 12;
+
+int readings[numReadings];      // the readings from the analog input
+int readIndex = 0;              // the index of the current reading
+int total = 0;                  // the running total
+int average = 0;                // the average
+
+int inputPin = A0; //analogu sensor pin
+
+int delayPause = 10;
+
+int headLights = 0;
+
+int currentMappedAverage = 0;
+int lastMappedAverage = 0;
+int currentMappedAverageMinus = 0;
+
+int red = 0;
+int green = 127;
+int blue = 0;
+
+void setup(){
+  Serial.begin(9600);
+
+  
+    // initialize all the readings to 0: 
+  for (int thisReading = 0; thisReading < numReadings; thisReading++)
+    readings[thisReading] = 0;    
+
+    // Start up the LED strip
+  strip.begin();
+
+  // Update the strip, to start they are all 'off'
+  strip.show();
+
+
+}
+
+void loop(){
+
+    // read the light input on analog pin A2:
+  int sensorValue = analogRead(A2);
+  // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
+  float voltage = sensorValue * (5.0 / 1023.0);
+  // print out the value you read:
+  Serial.print("Voltage: ");
+  Serial.println(voltage);
+  
+  //Below is the averaging code:
+    // subtract the last reading:
+  total= total - readings[readIndex];         
+  // read from the sensor:  
+  readings[readIndex] = analogRead(inputPin); 
+  // add the reading to the total:
+  total= total + readings[readIndex];       
+  // advance to the next position in the array:  
+  readIndex = readIndex + 1;                    
+
+  // if we're at the end of the array...
+  if (readIndex >= numReadings)              
+    // ...wrap around to the beginning: 
+    readIndex = 0;                           
+
+  // calculate the average:
+  average = total / numReadings;         
+  // send it to the computer as ASCII digits
+  
+  Serial.print("Average: ");
+  Serial.println(average); 
+
+  currentMappedAverage = map(average, 1, 450, 0, 24);
+ // currentMappedAverage = constrain(currentMappedAverage, 0, 47);
+ currentMappedAverageMinus = 47 - currentMappedAverage;
+
+
+
+if (currentMappedAverage >= 20 ) {
+    green = 0;
+    red = 127;
+    blue = 0;
+}
+
+if (currentMappedAverage >= 14 && currentMappedAverage <= 19  ) {
+    green = 30;
+    red = 127;
+    blue = 127;
+}
+
+if (currentMappedAverage <= 13 )  {
+  green = 127;
+  red = 0;
+  blue = 0;
+}
+
+
+  Serial.print("Green: ");
+  Serial.println(green); 
+  
+// Check Light Resistor
+/*****************************************************************************/
+
+if (voltage >= .3) {
+    headLights = 1;
+}
+
+if (voltage < .2) {
+  headLights = 0;
+  int i;
+  for(i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, 0);
+  strip.show();
+  
+}
+
+if (currentMappedAverage > lastMappedAverage && headLights == 1) {
+    writeLeds(strip.Color(  red,   blue, green), 0);
+    writeLedsB(strip.Color(  red,   blue, green), 0);
+}
+
+
+if (currentMappedAverage < lastMappedAverage && headLights == 1) {
+ writeLedsBack(strip.Color(  0,   0, 0), 0);
+  Serial.println("Backwards you bastard: "); 
+  
+  /*
+  int i;
+  for (i=48; i > lastMappedAverage; i--) strip.setPixelColor(i, 0);
+  strip.show();
+ */ 
+}
+
+
+
+Serial.print("headLights: "); 
+Serial.println(headLights); 
+Serial.print("currentMappedAverage: "); 
+Serial.println(currentMappedAverage);
+Serial.print("lastMappedAverage: "); 
+Serial.println(lastMappedAverage);
+  
+//delay (10);
+
+}
+
+// Function to write LEDs
+/*****************************************************************************/
+void writeLeds(uint32_t c, uint8_t wait) {
+ int i;
+
+ 
+  for(i=0; i < currentMappedAverage; i++) {
+  strip.setPixelColor(i, c);
+  strip.show();
+  lastMappedAverage = i;
+}
+}
+void writeLedsB(uint32_t b, uint8_t waitb) { 
+   int j;
+   
+  for(j=47; j > currentMappedAverageMinus; j--) {
+  strip.setPixelColor(j, b);
+  strip.show();
+  
+}
+}
+
+void writeLedsBack(uint32_t c, uint8_t wait) {
+ int i;
+ int j;
+ 
+  for(i=currentMappedAverageMinus; i > lastMappedAverage; i--) {
+  strip.setPixelColor(i, c);
+  strip.show();
+  lastMappedAverage = currentMappedAverage - 1;
+  
+}
+/*
+for(j=48; j < lastMappedAverage; j) {
+  strip.setPixelColor(i, c);
+  strip.show();
+}
+*/
+}
+
+
+
+// colorWipe Codes
+/*****************************************************************************/
+
+//void colorWipeGreen(uint32_t c, uint8_t wait) {
+
+//}
+//}
+
+
+
+
+/* Helper functions */
+/*****************************************************************************/
+
+//Input a value 0 to 384 to get a color value.
+//The colours are a transition r - g -b - back to r
+
+uint32_t Wheel(uint16_t WheelPos)
+{
+  byte r, g, b;
+  switch(WheelPos / 128)
+  {
+    case 0:
+      r = 127 - WheelPos % 128;   //Red down
+      g = WheelPos % 128;      // Green up
+      b = 0;                  //blue off
+      break; 
+    case 1:
+      g = 127 - WheelPos % 128;  //green down
+      b = WheelPos % 128;      //blue up
+      r = 0;                  //red off
+      break; 
+    case 2:
+      b = 127 - WheelPos % 128;  //blue down 
+      r = WheelPos % 128;      //red up
+      g = 0;                  //green off
+      break; 
+  }
+  return(strip.Color(r,g,b));
+}
+
