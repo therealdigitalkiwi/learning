@@ -1,16 +1,31 @@
 /*
-Prototype parking sensor LPD - with smoothing
+Version 6
+Prototype parking sensor using LPD8806 addressable LEDs, sharp 2y0a02 distance sensor and a Light Dependent Resistor.
+Original LED library from Adafruit (please support them the do great work and publish lots of libraries for use. 
+I'm using an Arduino Nano.
+Distance sensor connected to Analog pin 0
+Resistor connected to Analog pin 2 
+LPD8806 dataPin  = 2;
+LPD8806 clockPin = 3;
+Big shout out to the people over at reddit r/arduino - for helping with my code problems. 
+
+Disclaimer - I'm still learning how to code, any improvements  or suggestions very welcome. 
+There will probably be better, more efficient  ways to handle the LED writing back and findorth;
+I'd love to hear how. 
+
+Next Version: 
+I'd like to flash or wipe the last 6 or so LEDs in the middle (redMiddle etc) to signal to stop.
+I'm hoping to include a sleep function. 
+
 */
+
 #include "LPD8806.h"
-#include "SPI.h" // Comment out this line if using Trinket or Gemma
-#ifdef __AVR_ATtiny85__
- #include <avr/power.h>
-#endif
+#include "SPI.h"
 
 // Number of RGB LEDs in strand:
 int nLEDs = 48;
 
-// Chose 2 pins for output; can be any valid output pins:
+// LPD8806 output pins:
 int dataPin  = 2;
 int clockPin = 3;
 
@@ -27,6 +42,10 @@ LPD8806 strip = LPD8806(nLEDs, dataPin, clockPin);
 // clock = pin B1.  For Leonardo, this can ONLY be done on the ICSP pins.
 //LPD8806 strip = LPD8806(nLEDs);
 
+
+// This is the smoothing average control for the distance sensor;
+// A higher number = smoother result but longer processing time.
+
 const int numReadings = 12;
 
 int readings[numReadings];      // the readings from the analog input
@@ -34,25 +53,41 @@ int readIndex = 0;              // the index of the current reading
 int total = 0;                  // the running total
 int average = 0;                // the average
 
-int inputPin = A0; //analogu sensor pin
+// Analog distance sensor pin.
+int inputPin = A0; 
 
-int delayPause = 10;
+// Variable to hold the raw sensor value.
+int sensorValue = 0;
 
+// Variable to hold the raw voltage.
+float voltage = 0;
+
+// To Remove?
+// int delayPause = 10;
+
+// Are the headlights on or off variable.
 int headLights = 0;
 
+// Variables to hold the current distance.
 int currentMappedAverage = 0;
 int lastMappedAverage = 0;
 int currentMappedAverageMinus = 0;
 
+// Variables holding the colour information for the LEDs.
 int red = 0;
 int green = 127;
 int blue = 0;
+
+// Variables to turn on the LEDs when the object gets super close. 
+int  greenMiddle = 0;
+int  redMiddle = 0;
+int  blueMiddle = 0;
 
 void setup(){
   Serial.begin(9600);
 
   
-    // initialize all the readings to 0: 
+    // initialize all the LED readings to 0: 
   for (int thisReading = 0; thisReading < numReadings; thisReading++)
     readings[thisReading] = 0;    
 
@@ -68,9 +103,9 @@ void setup(){
 void loop(){
 
     // read the light input on analog pin A2:
-  int sensorValue = analogRead(A2);
+  sensorValue = analogRead(A2);
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
-  float voltage = sensorValue * (5.0 / 1023.0);
+  voltage = sensorValue * (5.0 / 1023.0);
   // print out the value you read:
   Serial.print("Voltage: ");
   Serial.println(voltage);
@@ -97,11 +132,13 @@ void loop(){
   Serial.print("Average: ");
   Serial.println(average); 
 
-  currentMappedAverage = map(average, 1, 450, 0, 24);
+// Map the average to match the number of my LEDs (48 / 2).
+  currentMappedAverage = map(average, 1, 350, 0, 24);
  // currentMappedAverage = constrain(currentMappedAverage, 0, 47);
  currentMappedAverageMinus = 47 - currentMappedAverage;
 
-
+// The below if conditions change the colours of the LEDs based on how 
+// close the object is to the sensor.
 
 if (currentMappedAverage >= 20 ) {
     green = 0;
@@ -112,7 +149,7 @@ if (currentMappedAverage >= 20 ) {
 if (currentMappedAverage >= 14 && currentMappedAverage <= 19  ) {
     green = 30;
     red = 127;
-    blue = 127;
+    blue = 0;
 }
 
 if (currentMappedAverage <= 13 )  {
@@ -121,24 +158,30 @@ if (currentMappedAverage <= 13 )  {
   blue = 0;
 }
 
+if (currentMappedAverage <= 0 )  {
+  green = 127;
+  red = 0;
+  blue = 0;
+}
 
-  Serial.print("Green: ");
-  Serial.println(green); 
+
   
-// Check Light Resistor
+// Check Light Resistor - 1 is on and 0 is off. 
 /*****************************************************************************/
 
-if (voltage >= .3) {
+if (voltage >= .2) {
     headLights = 1;
 }
 
-if (voltage < .2) {
+if (voltage < .1) {
   headLights = 0;
   int i;
   for(i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, 0);
   strip.show();
-  
 }
+
+// Check if it's ok to write forwards or clear the LEDs
+/*****************************************************************************/
 
 if (currentMappedAverage > lastMappedAverage && headLights == 1) {
     writeLeds(strip.Color(  red,   blue, green), 0);
@@ -147,83 +190,75 @@ if (currentMappedAverage > lastMappedAverage && headLights == 1) {
 
 
 if (currentMappedAverage < lastMappedAverage && headLights == 1) {
- writeLedsBack(strip.Color(  0,   0, 0), 0);
-  Serial.println("Backwards you bastard: "); 
-  
-  /*
-  int i;
-  for (i=48; i > lastMappedAverage; i--) strip.setPixelColor(i, 0);
-  strip.show();
- */ 
+ writeLedsBack(strip.Color(  redMiddle,  blueMiddle, greenMiddle), 0);
+  Serial.println("Heading Backwards"); 
 }
 
+// Variables to turn on the LEDs when the object gets super close.
 
+if (currentMappedAverage >= 22 && headLights == 1 ) {
+    //greenMiddle = 127;
+   // redMiddle = 127;
+    //blueMiddle = 127;
+    strip.setPixelColor(23, 127,127,127);
+    strip.setPixelColor(24, 127,127,127);
+    strip.show();
+    
+}
 
+if (currentMappedAverage <= 21 ) {
+    greenMiddle = 0;
+    redMiddle = 0;
+    blueMiddle = 0;
+}
+
+// Debugging 
 Serial.print("headLights: "); 
 Serial.println(headLights); 
 Serial.print("currentMappedAverage: "); 
 Serial.println(currentMappedAverage);
 Serial.print("lastMappedAverage: "); 
 Serial.println(lastMappedAverage);
-  
-//delay (10);
 
 }
 
-// Function to write LEDs
+// Function to write LEDs i.e is the object is getting closer or further away, 
+// Because we come in from both Left and Right we need write those individually. 
 /*****************************************************************************/
+// Left
 void writeLeds(uint32_t c, uint8_t wait) {
  int i;
 
- 
   for(i=0; i < currentMappedAverage; i++) {
   strip.setPixelColor(i, c);
   strip.show();
   lastMappedAverage = i;
 }
 }
+
+// Right
 void writeLedsB(uint32_t b, uint8_t waitb) { 
    int j;
    
   for(j=47; j > currentMappedAverageMinus; j--) {
   strip.setPixelColor(j, b);
-  strip.show();
-  
+  strip.show(); 
 }
 }
 
+// Function to clear the LEDs if the object drops further away.
+
 void writeLedsBack(uint32_t c, uint8_t wait) {
  int i;
- int j;
  
   for(i=currentMappedAverageMinus; i > lastMappedAverage; i--) {
   strip.setPixelColor(i, c);
   strip.show();
-  lastMappedAverage = currentMappedAverage - 1;
-  
+  lastMappedAverage = currentMappedAverage - 1; 
 }
-/*
-for(j=48; j < lastMappedAverage; j) {
-  strip.setPixelColor(i, c);
-  strip.show();
-}
-*/
 }
 
-
-
-// colorWipe Codes
-/*****************************************************************************/
-
-//void colorWipeGreen(uint32_t c, uint8_t wait) {
-
-//}
-//}
-
-
-
-
-/* Helper functions */
+/* Helper functions - Thanks to Adafruit */
 /*****************************************************************************/
 
 //Input a value 0 to 384 to get a color value.
